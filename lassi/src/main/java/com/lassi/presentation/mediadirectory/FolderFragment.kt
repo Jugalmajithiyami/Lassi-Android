@@ -19,7 +19,7 @@ import com.lassi.common.extenstions.hide
 import com.lassi.common.extenstions.show
 import com.lassi.common.utils.KeyUtils
 import com.lassi.data.common.Response
-import com.lassi.data.mediadirectory.Folder
+import com.lassi.data.mediadirectory.FolderDetail
 import com.lassi.domain.common.SafeObserver
 import com.lassi.domain.media.LassiConfig
 import com.lassi.domain.media.LassiOption
@@ -95,7 +95,7 @@ class FolderFragment : LassiBaseViewModelFragment<FolderViewModel>() {
         viewModel.fetchFolders()
     }
 
-    private fun handleFetchedFolders(response: Response<ArrayList<Folder>>) {
+    private fun handleFetchedFolders(response: Response<ArrayList<FolderDetail>>) {
         when (response) {
             is Response.Success -> {
                 progressBar.hide()
@@ -106,7 +106,7 @@ class FolderFragment : LassiBaseViewModelFragment<FolderViewModel>() {
         }
     }
 
-    private fun onItemClick(folder: Folder) {
+    private fun onItemClick(folder: FolderDetail) {
         activity?.supportFragmentManager?.beginTransaction()
             ?.setCustomAnimations(
                 R.anim.right_in,

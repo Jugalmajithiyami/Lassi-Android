@@ -10,16 +10,17 @@ import com.lassi.common.extenstions.loadImage
 import com.lassi.common.extenstions.show
 import com.lassi.common.utils.ImageUtils
 import com.lassi.data.mediadirectory.Folder
+import com.lassi.data.mediadirectory.FolderDetail
 import kotlinx.android.extensions.LayoutContainer
 import kotlinx.android.synthetic.main.item_media.*
 
 class FolderAdapter(
-    private val onItemClick: (folder: Folder) -> Unit
+    private val onItemClick: (folder: FolderDetail) -> Unit
 ) : RecyclerView.Adapter<FolderAdapter.FolderViewHolder>() {
 
-    private var folders = ArrayList<Folder>()
+    private var folders = ArrayList<FolderDetail>()
 
-    fun setList(folders: ArrayList<Folder>?) {
+    fun setList(folders: ArrayList<FolderDetail>?) {
         folders?.let {
             this.folders.clear()
             this.folders.addAll(it)
@@ -39,16 +40,17 @@ class FolderAdapter(
 
     inner class FolderViewHolder(override val containerView: View) :
         RecyclerView.ViewHolder(containerView), LayoutContainer {
-        fun bind(folder: Folder) {
+        fun bind(folder: FolderDetail) {
             with(folder) {
                 tvFolderName.show()
                 tvDuration.hide()
-                ivFolderThumbnail.loadImage(ImageUtils.getThumb(medias[0]))
-                tvFolderName.text = String.format(
-                    tvFolderName.context.getString(R.string.directory_with_item_count),
-                    folderName,
-                    medias.size.toString()
-                )
+                ivFolderThumbnail.loadImage(this.placeHolder)
+//                tvFolderName.text = String.format(
+//                    tvFolderName.context.getString(R.string.directory_with_item_count),
+//                    folderName,
+//                    medias.size.toString()
+//                )
+                tvFolderName.text = this.folderName
                 itemView.setOnClickListener {
                     onItemClick(folder)
                 }

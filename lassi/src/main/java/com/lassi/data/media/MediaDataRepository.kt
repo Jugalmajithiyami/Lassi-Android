@@ -8,6 +8,7 @@ import androidx.core.database.getStringOrNull
 import com.lassi.common.utils.KeyUtils
 import com.lassi.common.utils.Logger
 import com.lassi.data.mediadirectory.Folder
+import com.lassi.data.mediadirectory.FolderDetail
 import com.lassi.domain.media.LassiConfig
 import com.lassi.domain.media.MediaRepository
 import com.lassi.domain.media.MediaType
@@ -161,27 +162,31 @@ class MediaDataRepository(private val context: Context) : MediaRepository {
     private fun getProjections(): Array<String> {
         return when (LassiConfig.getConfig().mediaType) {
             MediaType.IMAGE -> arrayOf(
+                MediaStore.Images.Media.BUCKET_ID,
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
                 MediaStore.Images.Media._ID,
                 MediaStore.Images.Media.TITLE,
-                MediaStore.Images.Media.DATA,
-                MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+                MediaStore.Images.Media.DATA
             )
             MediaType.VIDEO -> arrayOf(
+                MediaStore.Video.Media.BUCKET_ID,
+                MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
                 MediaStore.Video.Media._ID,
                 MediaStore.Video.Media.TITLE,
                 MediaStore.Video.Media.DATA,
-                MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
                 MediaStore.Video.VideoColumns.DURATION
             )
             MediaType.AUDIO -> arrayOf(
+                MediaStore.Audio.Media.ALBUM_ID,
+                MediaStore.Audio.Media.ALBUM,
                 MediaStore.Audio.Media._ID,
                 MediaStore.Audio.Media.TITLE,
                 MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.AudioColumns.DURATION,
-                MediaStore.Audio.Media.ALBUM_ID
+                MediaStore.Audio.AudioColumns.DURATION
             )
             else -> arrayOf(
+                MediaStore.Files.FileColumns.BUCKET_ID,
+                MediaStore.Files.FileColumns.BUCKET_DISPLAY_NAME,
                 MediaStore.Files.FileColumns._ID,
                 MediaStore.Files.FileColumns.TITLE,
                 MediaStore.Files.FileColumns.DATA,
@@ -191,28 +196,34 @@ class MediaDataRepository(private val context: Context) : MediaRepository {
     }
 
     private fun query(projection: Array<String>): Cursor? {
+        val BUCKET_GROUP_BY = "1) GROUP BY 1,(2"
+        val BUCKET_ORDER_BY = MediaStore.Images.Media.DATE_MODIFIED + " DESC"
         return when (LassiConfig.getConfig().mediaType) {
             MediaType.IMAGE -> context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection,
+                BUCKET_GROUP_BY,
                 null,
-                null,
-                MediaStore.Images.Media.DATE_ADDED
+                BUCKET_ORDER_BY
             )
+
+
             MediaType.VIDEO -> context.contentResolver.query(
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                 projection,
+                BUCKET_GROUP_BY,
                 null,
-                null,
-                MediaStore.Video.Media.DATE_ADDED
+                BUCKET_ORDER_BY
             )
+
             MediaType.AUDIO -> context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
+                BUCKET_GROUP_BY,
                 null,
-                null,
-                MediaStore.Audio.Media.DATE_ADDED
+                BUCKET_ORDER_BY
             )
+
             MediaType.DOC -> {
                 val mimeTypes = mutableListOf<String>()
                 LassiConfig.getConfig().supportedFileType.forEach { mimeType ->
@@ -232,6 +243,45 @@ class MediaDataRepository(private val context: Context) : MediaRepository {
                     MediaStore.Video.Media.DATE_ADDED
                 )
             }
+        }
+    }
+
+    private fun fetchMediaQuery(projection: Array<String>, folderName: String): Cursor? {
+
+        return when (LassiConfig.getConfig().mediaType) {
+            MediaType.IMAGE -> context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                "${MediaStore.Images.Media.DATA} like ? ",
+                arrayOf("%$folderName%"),
+                null
+            )
+
+
+            MediaType.VIDEO -> context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                "${MediaStore.Video.Media.DATA} like ? ",
+                arrayOf("%$folderName%"),
+                null
+            )
+
+            MediaType.AUDIO -> context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                "${MediaStore.Audio.Media.DATA} like ? ",
+                arrayOf("%$folderName%"),
+                null
+            )
+
+
+            else -> context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                "${MediaStore.Audio.Media.DATA} like ? ",
+                arrayOf("%$folderName%"),
+                null
+            )
         }
     }
 
@@ -281,5 +331,58 @@ class MediaDataRepository(private val context: Context) : MediaRepository {
             cursor.close()
         }
         return Single.just(docs)
+    }
+
+    override fun fetchFolderList(): Single<ArrayList<FolderDetail>> {
+        val folderDetailList = ArrayList<FolderDetail>()
+        val projection = getProjections()
+
+//        val imagecursor: Cursor? = context.contentResolver.query(images, projection, BUCKET_GROUP_BY, null, BUCKET_ORDER_BY)
+//        val imagecursor: Cursor? = context.contentResolver.query(images, projection1,"_data IS NOT NULL", null, BUCKET_ORDER_BY);
+//TODO MANAGE QUERY FOR ANDROID 10
+
+        var cursor = query(projection)
+        cursor?.let {
+            while (it.moveToNext()) {
+                val bucketColumnIndex = it.getColumnIndex(projection[1])
+                val folderName = it.getString(bucketColumnIndex)
+                val placeHolder = it.getColumnIndex(projection[4])
+                folderDetailList.add(FolderDetail(folderName, it.getString(placeHolder)))
+            }
+            cursor.close()
+        }
+        return Single.just(folderDetailList)
+    }
+
+
+    override fun getAllMediaFromFolder(folderName: String): Single<ArrayList<MiMedia>> {
+        var projection = getProjections()
+        var mediaList: ArrayList<MiMedia> = ArrayList()
+        var mediaCursor = fetchMediaQuery(projection, folderName)
+
+        mediaCursor?.let {
+            while (it.moveToNext()) {
+                val id = it.getLong(it.getColumnIndex(projection[2]))
+                val name = it.getString(it.getColumnIndex(projection[3]))
+                val path = it.getString(it.getColumnIndex(projection[4]))
+
+                val albumCoverPath =
+                    if (LassiConfig.getConfig().mediaType == MediaType.AUDIO) {
+                        val albumId = it.getString(it.getColumnIndex(projection[0]))
+                        getAlbumArt(albumId)
+                    } else {
+                        ""
+                    }
+                val duration =
+                    if (LassiConfig.getConfig().mediaType == MediaType.VIDEO) {
+                        it.getLong(it.getColumnIndex(projection[4]))
+                    } else {
+                        0L
+                    }
+                mediaList.add(MiMedia(id, name, path,duration,albumCoverPath))
+            }
+            it.close()
+        }
+        return Single.just(mediaList)
     }
 }
